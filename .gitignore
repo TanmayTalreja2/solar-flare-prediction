@@ -1,0 +1,71 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Testing / tooling
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log
+logs/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Data
+data/raw/*
+data/interim/*
+data/processed/*
+data/external/*
+
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+!data/external/.gitkeep
+
+# Model artifacts
+models/*
+!models/.gitkeep
+
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.joblib
+*.pkl
+
+# Generated reports
+reports/figures/*
+!reports/figures/.gitkeep
+
+# Build artifacts
+build/
+dist/
+*.egg-info/

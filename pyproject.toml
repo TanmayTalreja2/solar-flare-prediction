@@ -1,0 +1,13 @@
+[project]
+name = "solar-flare-prediction"
+version = "0.1.0"
+description = "AI-powered solar flare prediction and space weather decision support system"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
