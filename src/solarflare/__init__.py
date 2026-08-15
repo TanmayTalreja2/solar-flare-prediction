@@ -1,0 +1,1 @@
+from solarflare.data.base import BaseCollector
