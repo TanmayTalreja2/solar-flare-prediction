@@ -1,0 +1,28 @@
+FINAL XGBOOST + CNN FUSION CONFIGURATION
+=========================================
+
+Temporal split:
+Train: January-April 2012
+Validation: May-June 2012
+Final test: July-December 2012
+
+Fusion weights selected using validation only.
+XGBoost weight: 0.00
+CNN weight: 1.00
+Threshold: 0.48
+
+Validation performance:
+Precision: 0.6721
+Recall: 0.8000
+F1: 0.7305
+
+FINAL UNSEEN TEST PERFORMANCE:
+ROC-AUC: 0.6750
+PR-AUC: 0.7510
+Precision: 0.6510
+Recall: 0.6881
+F1: 0.6691
+
+Confusion matrix:
+[[701 498]
+ [421 929]]

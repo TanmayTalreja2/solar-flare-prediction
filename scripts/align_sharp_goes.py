@@ -3,52 +3,40 @@ from pathlib import Path
 import pandas as pd
 
 
+# ============================================================
+# CONFIGURATION
+# ============================================================
+
 SHARP_PATH = Path(
-    "data/raw/sharp/sharp_sample_2012_03_07.parquet"
+    "data/raw/sharp/"
+    "sharp_2012_full_year.parquet"
 )
 
 GOES_PATH = Path(
-    "data/processed/goes/goes_flares_2012.parquet"
+    "data/raw/goes/"
+    "goes_flares_2012.csv"
 )
 
 OUTPUT_PATH = Path(
     "data/processed/aligned/"
-    "sharp_goes_training_2012_03_07.parquet"
+    "sharp_goes_training_2012_full.parquet"
 )
+FORECAST_HOURS = 24
 
 
-SHARP_FEATURES = [
-    "USFLUX",
-    "TOTUSJH",
-    "TOTPOT",
-    "MEANPOT",
-    "MEANSHR",
-]
+# ============================================================
+# LOAD SHARP
+# ============================================================
 
+def load_sharp() -> pd.DataFrame:
+    """Load and prepare SHARP observations."""
 
-def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load SHARP and GOES datasets."""
+    print("Loading SHARP data...")
 
     sharp = pd.read_parquet(
         SHARP_PATH
-    )
+    ).copy()
 
-    goes = pd.read_parquet(
-        GOES_PATH
-    )
-
-    return sharp, goes
-
-
-def prepare_sharp(
-    sharp: pd.DataFrame,
-) -> pd.DataFrame:
-    """Prepare SHARP observations."""
-
-    sharp = sharp.copy()
-
-    # SHARP uses the format:
-    # 2012.03.07_00:00:00_TAI
     sharp["observation_time"] = pd.to_datetime(
         sharp["T_REC"],
         format="%Y.%m.%d_%H:%M:%S_TAI",
@@ -60,17 +48,54 @@ def prepare_sharp(
         errors="coerce",
     )
 
+    # Remove observations without a valid
+    # NOAA active-region association.
+    sharp = sharp[
+        sharp["NOAA_AR"].notna()
+        & (sharp["NOAA_AR"] != 0)
+    ].copy()
+
+    sharp = sharp.dropna(
+        subset=["observation_time"]
+    )
+
+    sharp = sharp.sort_values(
+        [
+            "NOAA_AR",
+            "observation_time",
+        ]
+    ).reset_index(
+        drop=True
+    )
+
+    print(
+        f"SHARP rows: {len(sharp)}"
+    )
+
+    print(
+        f"SHARP active regions: "
+        f"{sharp['NOAA_AR'].nunique()}"
+    )
+
     return sharp
 
-def prepare_goes(
-    goes: pd.DataFrame,
-) -> pd.DataFrame:
-    """Prepare GOES flare events."""
 
-    goes = goes.copy()
+# ============================================================
+# LOAD GOES
+# ============================================================
 
-    goes["peak_time"] = pd.to_datetime(
-        goes["peak_time"],
+def load_goes() -> pd.DataFrame:
+    """Load and prepare GOES M/X flare events."""
+
+    print()
+    print("Loading GOES data...")
+
+    goes = pd.read_csv(
+        GOES_PATH
+    ).copy()
+
+    goes["start_time"] = pd.to_datetime(
+        goes["start_time"],
         errors="coerce",
     )
 
@@ -79,96 +104,226 @@ def prepare_goes(
         errors="coerce",
     )
 
-    # GOES stores the NOAA active-region number
-    # without the leading 11 for this historical data.
-    #
-    # Example:
-    #
-    # GOES: 1429
-    # SHARP: 11429
-    #
-    # Therefore convert GOES IDs into the SHARP/NOAA format.
-
+    # GOES active-region numbering is mapped
+    # to the NOAA_AR representation used by SHARP.
     goes["NOAA_AR"] = (
         goes["active_region"] + 10000
     )
 
     # Keep only M/X flares.
     goes = goes[
-        goes["flare_category"].isin(
-            ["M", "X"]
+        goes["flare_class"]
+        .astype(str)
+        .str.startswith(
+            ("M", "X")
         )
     ].copy()
 
+    goes["flare_time"] = (
+        goes["start_time"]
+    )
+
+    goes = goes.dropna(
+        subset=[
+            "flare_time",
+            "NOAA_AR",
+        ]
+    )
+
+    goes = goes.sort_values(
+        [
+            "NOAA_AR",
+            "flare_time",
+        ]
+    ).reset_index(
+        drop=True
+    )
+
+    print(
+        f"GOES M/X events: {len(goes)}"
+    )
+
+    print(
+        f"GOES active regions: "
+        f"{goes['NOAA_AR'].nunique()}"
+    )
+
+    print()
+    print("Sample M/X events:")
+
+    print(
+        goes[
+            [
+                "flare_time",
+                "flare_class",
+                "active_region",
+                "NOAA_AR",
+            ]
+        ].head()
+    )
+
     return goes
 
+
+# ============================================================
+# CREATE 24-HOUR LABELS
+# ============================================================
 
 def create_labels(
     sharp: pd.DataFrame,
     goes: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Create 24-hour M/X flare labels."""
+    """
+    Assign target_24h = 1 when an M/X flare
+    begins within the next 24 hours for the
+    same active region.
+    """
 
-    results = []
+    print()
+    print(
+        "========== CREATING LABELS =========="
+    )
 
-    for _, observation in sharp.iterrows():
+    sharp = sharp.copy()
 
-        observation_time = (
-            observation["observation_time"]
+    # Store flare times by active region.
+    flare_times = {}
+
+    for region, group in goes.groupby(
+        "NOAA_AR"
+    ):
+
+        flare_times[region] = (
+            group["flare_time"]
+            .sort_values()
+            .tolist()
         )
 
-        region = observation["NOAA_AR"]
+    labels = []
+
+    for _, row in sharp.iterrows():
+
+        region = row["NOAA_AR"]
+
+        observation_time = (
+            row["observation_time"]
+        )
+
+        if pd.isna(region) or pd.isna(
+            observation_time
+        ):
+            labels.append(0)
+            continue
 
         window_end = (
             observation_time
-            + pd.Timedelta(hours=24)
+            + pd.Timedelta(
+                hours=FORECAST_HOURS
+            )
         )
 
-        matching_flares = goes[
-    (goes["NOAA_AR"] == region)
-    & (
-        goes["peak_time"]
-        > observation_time
-    )
-    & (
-        goes["peak_time"]
-        <= window_end
-    )
-]
+        event_times = flare_times.get(
+            region,
+            [],
+        )
 
-        row = observation.to_dict()
+        target = any(
+            observation_time < flare_time <= window_end
+            for flare_time in event_times
+        )
 
-        if len(matching_flares) > 0:
+        labels.append(
+            int(target)
+        )
 
-            first_flare = (
-                matching_flares
-                .sort_values("peak_time")
-                .iloc[0]
-            )
+    sharp["target_24h"] = labels
 
-            row["target_24h"] = 1
-            row["next_flare_class"] = (
-                first_flare["flare_class"]
-            )
-            row["next_flare_time"] = (
-                first_flare["peak_time"]
-            )
-
-        else:
-
-            row["target_24h"] = 0
-            row["next_flare_class"] = None
-            row["next_flare_time"] = pd.NaT
-
-        results.append(row)
-
-    return pd.DataFrame(results)
+    return sharp
 
 
-def save_dataset(
+# ============================================================
+# SUMMARY
+# ============================================================
+
+def print_summary(
     data: pd.DataFrame,
 ) -> None:
-    """Save aligned training dataset."""
+
+    print()
+    print(
+        "========================================"
+    )
+    print(
+        " ALIGNMENT SUMMARY"
+    )
+    print(
+        "========================================"
+    )
+
+    print(
+        f"SHARP observations: "
+        f"{len(data)}"
+    )
+
+    print(
+        f"Active regions: "
+        f"{data['NOAA_AR'].nunique()}"
+    )
+
+    print()
+
+    print(
+        "Time range:"
+    )
+
+    print(
+        f"{data['observation_time'].min()} "
+        f"→ "
+        f"{data['observation_time'].max()}"
+    )
+
+    print()
+
+    print(
+        "Target distribution:"
+    )
+
+    print(
+        data["target_24h"]
+        .value_counts()
+        .sort_index()
+    )
+
+    print()
+
+    print(
+        "Target percentages:"
+    )
+
+    print(
+        data["target_24h"]
+        .value_counts(
+            normalize=True
+        )
+        .mul(100)
+        .round(2)
+    )
+
+    print()
+
+    print(
+        f"Positive observations: "
+        f"{int(data['target_24h'].sum())}"
+    )
+
+
+# ============================================================
+# SAVE
+# ============================================================
+
+def save_data(
+    data: pd.DataFrame,
+) -> None:
 
     OUTPUT_PATH.parent.mkdir(
         parents=True,
@@ -181,47 +336,53 @@ def save_dataset(
     )
 
     print()
-    print("========== ALIGNMENT COMPLETE ==========")
-    print(f"Rows: {len(data)}")
-    print(f"Output: {OUTPUT_PATH}")
-
-    print()
-    print("========== TARGET DISTRIBUTION ==========")
     print(
-        data["target_24h"]
-        .value_counts()
+        "Dataset saved:"
     )
 
+    print(
+        OUTPUT_PATH
+    )
+
+
+# ============================================================
+# MAIN
+# ============================================================
 
 def main() -> None:
-    """Run SHARP-GOES alignment."""
 
-    print("Loading datasets...")
-
-    sharp, goes = load_data()
-
-    print(f"SHARP rows: {len(sharp)}")
-    print(f"GOES rows: {len(goes)}")
-
-    sharp = prepare_sharp(
-        sharp
-    )
-
-    goes = prepare_goes(
-        goes
+    print(
+        "========================================"
     )
 
     print(
-        f"M/X GOES events: {len(goes)}"
+        " SHARP + GOES ALIGNMENT"
     )
+
+    print(
+        "========================================"
+    )
+
+    sharp = load_sharp()
+
+    goes = load_goes()
 
     aligned = create_labels(
         sharp,
         goes,
     )
 
-    save_dataset(
+    print_summary(
         aligned
+    )
+
+    save_data(
+        aligned
+    )
+
+    print()
+    print(
+        "========== ALIGNMENT COMPLETE =========="
     )
 
 

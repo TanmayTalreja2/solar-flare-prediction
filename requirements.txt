@@ -20,3 +20,9 @@ ruff
 tenacity
 
 drms
+# Magnetogram CNN Pipeline
+torch
+torchvision
+sunpy
+astropy
+tqdm

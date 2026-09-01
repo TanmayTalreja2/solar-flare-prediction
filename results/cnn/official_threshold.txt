@@ -1,0 +1,8 @@
+OFFICIAL CNN THRESHOLD
+======================
+Selected using validation data only.
+Target recall: 0.80
+Threshold: 0.48
+Validation precision: 0.6721
+Validation recall: 0.8000
+Validation F1: 0.7305

@@ -5,15 +5,23 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 
-OUTPUT_PATH = Path(
-    "data/raw/sharp/sharp_2012_03_01_30d.parquet"
-)
+# ============================================================
+# CONFIGURATION
+# ============================================================
 
-START_DATE = datetime(2012, 3, 1)
-END_DATE = datetime(2012, 3, 31)
+START_DATE = datetime(2012, 4, 1)
+END_DATE = datetime(2013, 1, 1)
 
 CHUNK_DAYS = 7
 
+OUTPUT_PATH = Path(
+    "data/raw/sharp/sharp_2012_04_01_2012_12_31.parquet"
+)
+
+
+# ============================================================
+# SHARP PARAMETERS
+# ============================================================
 
 KEYS = [
     "T_REC",
@@ -29,6 +37,10 @@ KEYS = [
     "MEANSHR",
 ]
 
+
+# ============================================================
+# QUERY ONE CHUNK
+# ============================================================
 
 def query_chunk(
     client: drms.Client,
@@ -49,7 +61,7 @@ def query_chunk(
     print("Querying SHARP chunk")
     print(f"Start: {start}")
     print(f"End:   {end}")
-    print(f"Query: {query}")
+    print(f"Duration: {duration.days} days")
     print("----------------------------------------")
 
     result = client.query(
@@ -65,17 +77,35 @@ def query_chunk(
     return result
 
 
+# ============================================================
+# MAIN
+# ============================================================
+
 def main() -> None:
 
     print("========================================")
-    print(" SHARP 30-DAY CHUNKED COLLECTION")
+    print(" SHARP CHUNKED COLLECTION")
     print("========================================")
+
+    print(
+        f"Start date: {START_DATE}"
+    )
+
+    print(
+        f"End date:   {END_DATE}"
+    )
+
+    print(
+        f"Chunk size: {CHUNK_DAYS} days"
+    )
 
     client = drms.Client()
 
     chunks = []
 
     current = START_DATE
+
+    chunk_number = 1
 
     while current < END_DATE:
 
@@ -84,6 +114,11 @@ def main() -> None:
                 days=CHUNK_DAYS
             ),
             END_DATE,
+        )
+
+        print()
+        print(
+            f"========== CHUNK {chunk_number} =========="
         )
 
         result = query_chunk(
@@ -96,6 +131,12 @@ def main() -> None:
             chunks.append(result)
 
         current = chunk_end
+
+        chunk_number += 1
+
+    # ========================================================
+    # COMBINE
+    # ========================================================
 
     print()
     print("========================================")
@@ -112,15 +153,43 @@ def main() -> None:
         ignore_index=True,
     )
 
-    # Remove duplicate observations
+    rows_before = len(data)
+
+    # Remove true duplicate SHARP observations.
     data = data.drop_duplicates(
-        subset=["HARPNUM", "T_REC"]
+        subset=[
+            "HARPNUM",
+            "T_REC",
+        ]
     )
 
-    # Sort chronologically
+    duplicates_removed = (
+        rows_before - len(data)
+    )
+
+    print(
+        f"Duplicate observations removed: "
+        f"{duplicates_removed}"
+    )
+
+    # Sort chronologically.
     data = data.sort_values(
-        ["T_REC", "HARPNUM"]
-    ).reset_index(drop=True)
+        [
+            "T_REC",
+            "HARPNUM",
+        ]
+    ).reset_index(
+        drop=True
+    )
+
+    # ========================================================
+    # SUMMARY
+    # ========================================================
+
+    print()
+    print("========================================")
+    print(" COLLECTION SUMMARY")
+    print("========================================")
 
     print(
         f"Total rows: {len(data)}"
@@ -138,11 +207,16 @@ def main() -> None:
 
     print()
     print("Time range:")
+
     print(
         f"{data['T_REC'].min()} "
         f"→ "
         f"{data['T_REC'].max()}"
     )
+
+    # ========================================================
+    # SAVE
+    # ========================================================
 
     OUTPUT_PATH.parent.mkdir(
         parents=True,

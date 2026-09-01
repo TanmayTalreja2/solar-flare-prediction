@@ -1,0 +1,12 @@
+metric,value
+xgb_weight,0.0
+cnn_weight,1.0
+threshold,0.48
+validation_precision,0.6721044045676998
+validation_recall,0.8
+validation_f1,0.7304964539007093
+final_test_roc_auc,0.6750131282241374
+final_test_pr_auc,0.7510395987164896
+final_test_precision,0.6510161177295024
+final_test_recall,0.6881481481481482
+final_test_f1,0.6690673388548793

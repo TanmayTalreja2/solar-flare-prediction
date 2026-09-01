@@ -1,0 +1,11 @@
+RECALL-PRIORITY CNN THRESHOLD
+==============================
+Target recall: 0.80
+Selected threshold: 0.11
+Precision: 0.5678
+Recall: 0.8030
+F1: 0.6652
+
+Confusion Matrix:
+[[ 374  825]
+ [ 266 1084]]
