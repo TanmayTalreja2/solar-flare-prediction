@@ -1,22 +1,43 @@
+# Data processing
 numpy
 pandas
+pyarrow
+
+# Machine Learning
 scikit-learn
+xgboost
+joblib
+
+# Deep Learning
+torch
+torchvision
+
+# Visualization
 matplotlib
 plotly
 
+# HTTP / APIs
 requests
 httpx
 
+# Backend API
 fastapi
 uvicorn[standard]
+
+# Dashboard
 streamlit
 
+# Configuration
 pydantic
 pydantic-settings
 python-dotenv
 
-pytest
-ruff
+# Reliability
 tenacity
 
+# Solar Data
 drms
+
+# Development / Testing
+pytest
+ruff
