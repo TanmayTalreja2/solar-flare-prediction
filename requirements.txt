@@ -40,4 +40,4 @@ drms
 
 # Development / Testing
 pytest
-ruff
+ruffreportlab

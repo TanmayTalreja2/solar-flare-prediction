@@ -9,7 +9,7 @@ import pandas as pd
 
 SHARP_PATH = Path(
     "data/raw/sharp/"
-    "sharp_2012_full_year.parquet"
+    "sharp_2012_full_year_25params.parquet"
 )
 
 GOES_PATH = Path(
@@ -19,7 +19,7 @@ GOES_PATH = Path(
 
 OUTPUT_PATH = Path(
     "data/processed/aligned/"
-    "sharp_goes_training_2012_full.parquet"
+    "sharp_goes_training_2012_full_25params.parquet"
 )
 FORECAST_HOURS = 24
 

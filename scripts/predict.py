@@ -25,9 +25,10 @@ class SolarFlarePredictor:
         self.imputer = self.model_package["imputer"]
         self.features = self.model_package["features"]
         
-        # We override the default threshold (0.5) with the optimal tuned threshold for F1/Recall.
-        self.threshold = 0.01
-        print("Model loaded successfully.")
+        # Use the F1-optimal threshold that was tuned and saved during training.
+        # Falls back to 0.01 only if an older model package doesn't have one saved.
+        self.threshold = self.model_package.get("threshold", 0.01)
+        print(f"Model loaded successfully. Using threshold: {self.threshold:.2f}")
         
     def classify_risk(self, probability):
         """
@@ -45,7 +46,7 @@ class SolarFlarePredictor:
     def predict(self, df):
         """
         Make predictions on a DataFrame.
-        
+
         Args:
             df (pd.DataFrame): DataFrame containing at least the 71 required features.
             
@@ -60,7 +61,7 @@ class SolarFlarePredictor:
             
         # Extract only the features the model was trained on, in the exact order
         X = df[self.features].copy()
-        
+
         # Apply median imputation (fitted on the training set)
         X_imputed = self.imputer.transform(X)
         

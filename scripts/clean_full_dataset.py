@@ -6,13 +6,42 @@ import pandas as pd
 
 INPUT_PATH = Path(
     "data/processed/aligned/"
-    "sharp_goes_training_2012_full.parquet"
+    "sharp_goes_training_2012_full_25params.parquet"
 )
 
 OUTPUT_PATH = Path(
     "data/processed/cleaned/"
-    "sharp_goes_clean_2012_full.parquet"
+    "sharp_goes_clean_2012_full_25params.parquet"
 )
+
+
+PHYSICAL_COLUMNS = [
+    "USFLUX",
+    "MEANGAM",
+    "MEANGBT",
+    "MEANGBZ",
+    "MEANGBH",
+    "MEANJZD",
+    "TOTUSJZ",
+    "MEANALP",
+    "MEANJZH",
+    "TOTUSJH",
+    "ABSNJZH",
+    "SAVNCPP",
+    "MEANPOT",
+    "TOTPOT",
+    "MEANSHR",
+    "SHRGT45",
+    "R_VALUE",
+    "TOTFX",
+    "TOTFY",
+    "TOTFZ",
+    "EPSX",
+    "EPSY",
+    "EPSZ",
+    "TOTBSQ",
+    "TOTABSTWIST",
+]
 
 
 def main() -> None:
@@ -32,6 +61,58 @@ def main() -> None:
     )
 
     # --------------------------------------------------
+    # Force physical SHARP columns to numeric.
+    #
+    # JSOC/DRMS occasionally returns a string error
+    # sentinel (e.g. "Invalid KeyLink") instead of a
+    # numeric value or NaN for some of the more exotic
+    # derived parameters. Coerce these to NaN here so
+    # downstream numeric operations never crash on a
+    # stray string.
+    # --------------------------------------------------
+
+    print()
+    print(
+        "========== NUMERIC COERCION =========="
+    )
+
+    coerced_any = False
+
+    for column in PHYSICAL_COLUMNS:
+
+        if column not in data.columns:
+            continue
+
+        before_missing = data[column].isna().sum()
+
+        coerced = pd.to_numeric(
+            data[column],
+            errors="coerce",
+        )
+
+        new_invalid = (
+            coerced.isna().sum()
+            - before_missing
+        )
+
+        data[column] = coerced
+
+        if new_invalid > 0:
+
+            coerced_any = True
+
+            print(
+                f"{column:20s} "
+                f"{new_invalid} invalid string values -> NaN"
+            )
+
+    if not coerced_any:
+
+        print(
+            "No invalid string values found "
+            "(all columns already clean or numeric)."
+        )
+    # --------------------------------------------------
     # Timestamp
     # --------------------------------------------------
 
@@ -48,6 +129,7 @@ def main() -> None:
         data["observation_time"].notna()
     ].copy()
 
+    print()
     print(
         f"Invalid timestamps removed: "
         f"{invalid_time}"

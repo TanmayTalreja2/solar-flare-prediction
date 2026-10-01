@@ -47,10 +47,11 @@ OUTPUT_DIR.mkdir(
     exist_ok=True
 )
 
-# Same chronological test period
-TEST_START = pd.Timestamp(
-    "2012-07-01 00:00:00"
-)
+# Same chronological boundaries used to train XGBoost and the CNN.
+# VALIDATION is used to fit + threshold the fusion model.
+# TEST is used ONLY for the final, honest evaluation.
+VALIDATION_START = pd.Timestamp("2012-05-01 00:00:00")
+TEST_START = pd.Timestamp("2012-07-01 00:00:00")
 
 
 # ============================================================
@@ -102,19 +103,14 @@ def load_cnn():
     return model, device
 
 
-def get_cnn_predictions(
-    labels,
-):
+def get_cnn_predictions(labels, cnn_model=None, cnn_device=None):
 
     import torch
 
-    model, device = load_cnn()
+    if cnn_model is None:
+        cnn_model, cnn_device = load_cnn()
 
     probabilities = []
-
-    print(
-        "Generating CNN predictions..."
-    )
 
     for _, row in labels.iterrows():
 
@@ -147,11 +143,11 @@ def get_cnn_predictions(
             dtype=torch.float32
         ).unsqueeze(0).unsqueeze(0)
 
-        tensor = tensor.to(device)
+        tensor = tensor.to(cnn_device)
 
         with torch.no_grad():
 
-            output = model(
+            output = cnn_model(
                 tensor
             ).view(-1)
 
@@ -169,85 +165,48 @@ def get_cnn_predictions(
 
 
 # ============================================================
-# MAIN
+# BUILD XGB + CNN PROBABILITIES FOR A GIVEN PERIOD
 # ============================================================
 
-def main():
+def build_period_probabilities(
+    data,
+    labels,
+    period_start,
+    period_end,
+    xgb_model,
+    imputer,
+    features,
+    cnn_model,
+    cnn_device,
+    period_name,
+):
 
-    print("=" * 60)
-    print(" XGBOOST + CNN FUSION")
-    print("=" * 60)
+    print(f"\nBuilding probabilities for {period_name} period...")
 
-    # --------------------------------------------------------
-    # Load data
-    # --------------------------------------------------------
+    if period_end is not None:
+        period_data = data[
+            (data["observation_time"] >= period_start)
+            & (data["observation_time"] < period_end)
+        ].copy()
 
-    print(
-        "Loading feature data..."
-    )
+        period_labels = labels[
+            (labels["observation_time"] >= period_start)
+            & (labels["observation_time"] < period_end)
+        ].copy()
 
-    data = pd.read_parquet(
-        FEATURES
-    )
+    else:
+        period_data = data[
+            data["observation_time"] >= period_start
+        ].copy()
 
-    data[
-        "observation_time"
-    ] = pd.to_datetime(
-        data["observation_time"]
-    )
+        period_labels = labels[
+            labels["observation_time"] >= period_start
+        ].copy()
 
-    test_data = data[
-        data["observation_time"]
-        >= TEST_START
-    ].copy()
+    print(f"{period_name} feature rows : {len(period_data)}")
+    print(f"{period_name} magnetogram rows: {len(period_labels)}")
 
-    print(
-        f"Test observations: "
-        f"{len(test_data)}"
-    )
-
-    print(
-        "Loading magnetogram labels..."
-    )
-
-    labels = pd.read_csv(
-        LABELS
-    )
-
-    labels[
-        "observation_time"
-    ] = pd.to_datetime(
-        labels["observation_time"]
-    )
-
-    labels = labels[
-        labels["observation_time"]
-        >= TEST_START
-    ].copy()
-
-    print(
-        f"Test magnetograms: "
-        f"{len(labels)}"
-    )
-
-    # --------------------------------------------------------
-    # XGBoost
-    # --------------------------------------------------------
-
-    print(
-        "\nLoading XGBoost..."
-    )
-
-    package = joblib.load(
-        XGB_PATH
-    )
-
-    xgb_model = package["model"]
-    imputer = package["imputer"]
-    features = package["features"]
-
-    # Match by HARPNUM + observation time
-    xgb_subset = test_data[
+    xgb_subset = period_data[
         [
             "HARPNUM",
             "NOAA_AR",
@@ -257,7 +216,7 @@ def main():
         + features
     ].copy()
 
-    merged = labels.merge(
+    merged = period_labels.merge(
         xgb_subset,
         on=[
             "HARPNUM",
@@ -267,32 +226,11 @@ def main():
         suffixes=("_label", "")
     )
 
-    print(
-        f"Matched observations: "
-        f"{len(merged)}"
-    )
+    print(f"{period_name} matched observations: {len(merged)}")
 
-    # --------------------------------------------------------
-    # XGBoost probabilities
-    # --------------------------------------------------------
-
-    X = merged[
-        features
-    ]
-
-    X_imp = imputer.transform(
-        X
-    )
-
-    merged[
-        "xgb_probability"
-    ] = xgb_model.predict_proba(
-        X_imp
-    )[:, 1]
-
-    # --------------------------------------------------------
-    # CNN probabilities
-    # --------------------------------------------------------
+    X = merged[features]
+    X_imp = imputer.transform(X)
+    merged["xgb_probability"] = xgb_model.predict_proba(X_imp)[:, 1]
 
     cnn_probs = get_cnn_predictions(
         merged[
@@ -302,304 +240,195 @@ def main():
                 "target_24h_label",
             ]
         ].rename(
-            columns={
-                "target_24h_label":
-                    "target_24h"
-            }
-        )
+            columns={"target_24h_label": "target_24h"}
+        ),
+        cnn_model=cnn_model,
+        cnn_device=cnn_device,
     )
 
-    merged[
-        "cnn_probability"
-    ] = cnn_probs
+    merged["cnn_probability"] = cnn_probs
 
-    # Remove missing CNN predictions
     merged = merged.dropna(
-        subset=[
-            "xgb_probability",
-            "cnn_probability",
-        ]
-    ).reset_index(
-        drop=True
-    )
+        subset=["xgb_probability", "cnn_probability"]
+    ).reset_index(drop=True)
 
-    y = merged[
-        "target_24h_label"
-    ].astype(int)
+    print(f"{period_name} final matched samples: {len(merged)}")
 
-    print(
-        f"\nFinal matched samples: "
-        f"{len(merged)}"
-    )
+    return merged
 
-    print(
-        f"Positive: {(y == 1).sum()}"
-    )
 
-    print(
-        f"Negative: {(y == 0).sum()}"
-    )
+# ============================================================
+# MAIN
+# ============================================================
 
-    # --------------------------------------------------------
-    # Individual models
-    # --------------------------------------------------------
+def main():
 
-    xgb_prob = merged[
-        "xgb_probability"
-    ].values
-
-    cnn_prob = merged[
-        "cnn_probability"
-    ].values
-
-    print("\n" + "=" * 60)
-    print(" INDIVIDUAL MODEL PERFORMANCE")
+    print("=" * 60)
+    print(" XGBOOST + CNN FUSION (leakage-free)")
     print("=" * 60)
 
-    print(
-        f"XGBoost ROC-AUC: "
-        f"{roc_auc_score(y, xgb_prob):.4f}"
-    )
+    print("Loading feature data...")
+    data = pd.read_parquet(FEATURES)
+    data["observation_time"] = pd.to_datetime(data["observation_time"])
 
-    print(
-        f"XGBoost PR-AUC : "
-        f"{average_precision_score(y, xgb_prob):.4f}"
-    )
+    print("Loading magnetogram labels...")
+    labels = pd.read_csv(LABELS)
+    labels["observation_time"] = pd.to_datetime(labels["observation_time"])
 
-    print(
-        f"CNN ROC-AUC    : "
-        f"{roc_auc_score(y, cnn_prob):.4f}"
-    )
+    print("\nLoading XGBoost...")
+    package = joblib.load(XGB_PATH)
+    xgb_model = package["model"]
+    imputer = package["imputer"]
+    features = package["features"]
 
-    print(
-        f"CNN PR-AUC     : "
-        f"{average_precision_score(y, cnn_prob):.4f}"
-    )
+    print("Loading CNN...")
+    cnn_model, cnn_device = load_cnn()
 
     # --------------------------------------------------------
-    # Fusion model
+    # VALIDATION PERIOD: fit fusion model + pick threshold here.
+    # Neither XGBoost nor the CNN were trained on this period,
+    # so it's a legitimate place to fit a small meta-learner.
     # --------------------------------------------------------
 
-    fusion_X = np.column_stack(
-        [
-            xgb_prob,
-            cnn_prob,
-        ]
+    val_merged = build_period_probabilities(
+        data, labels,
+        VALIDATION_START, TEST_START,
+        xgb_model, imputer, features,
+        cnn_model, cnn_device,
+        period_name="VALIDATION",
     )
 
-    print("\nTraining fusion model...")
+    y_val = val_merged["target_24h_label"].astype(int)
+    xgb_val = val_merged["xgb_probability"].values
+    cnn_val = val_merged["cnn_probability"].values
 
+    print("\n" + "=" * 60)
+    print(" VALIDATION-PERIOD INDIVIDUAL MODEL PERFORMANCE")
+    print("=" * 60)
+    print(f"XGBoost ROC-AUC: {roc_auc_score(y_val, xgb_val):.4f}")
+    print(f"XGBoost PR-AUC : {average_precision_score(y_val, xgb_val):.4f}")
+    print(f"CNN ROC-AUC    : {roc_auc_score(y_val, cnn_val):.4f}")
+    print(f"CNN PR-AUC     : {average_precision_score(y_val, cnn_val):.4f}")
+
+    fusion_X_val = np.column_stack([xgb_val, cnn_val])
+
+    print("\nFitting fusion model on VALIDATION period only...")
     fusion_model = LogisticRegression(
         class_weight="balanced",
         random_state=42,
         max_iter=1000,
     )
+    fusion_model.fit(fusion_X_val, y_val)
 
-    fusion_model.fit(
-        fusion_X,
-        y
-    )
+    fusion_val_prob = fusion_model.predict_proba(fusion_X_val)[:, 1]
 
-    fusion_prob = fusion_model.predict_proba(
-        fusion_X
-    )[:, 1]
-
-    # --------------------------------------------------------
-    # Fusion evaluation
-    # --------------------------------------------------------
-
-    fusion_roc = roc_auc_score(
-        y,
-        fusion_prob
-    )
-
-    fusion_pr = average_precision_score(
-        y,
-        fusion_prob
-    )
-
-    # Threshold search
-    thresholds = np.arange(
-        0.01,
-        0.51,
-        0.01
-    )
-
+    # Threshold is also chosen on validation only.
+    thresholds = np.arange(0.01, 0.51, 0.01)
     best_threshold = 0.5
     best_f1 = -1
 
     for threshold in thresholds:
-
-        predictions = (
-            fusion_prob
-            >= threshold
-        ).astype(int)
-
-        score = f1_score(
-            y,
-            predictions,
-            zero_division=0
-        )
-
+        preds = (fusion_val_prob >= threshold).astype(int)
+        score = f1_score(y_val, preds, zero_division=0)
         if score > best_f1:
-
             best_f1 = score
             best_threshold = threshold
 
-    final_predictions = (
-        fusion_prob
-        >= best_threshold
-    ).astype(int)
+    print(f"Fusion threshold selected on validation: {best_threshold:.2f}")
 
-    precision = precision_score(
-        y,
-        final_predictions,
-        zero_division=0
+    # --------------------------------------------------------
+    # TEST PERIOD: the ONLY place we evaluate. Fusion model and
+    # threshold are already frozen from the validation step.
+    # --------------------------------------------------------
+
+    test_merged = build_period_probabilities(
+        data, labels,
+        TEST_START, None,
+        xgb_model, imputer, features,
+        cnn_model, cnn_device,
+        period_name="TEST",
     )
 
-    recall = recall_score(
-        y,
-        final_predictions,
-        zero_division=0
-    )
-
-    cm = confusion_matrix(
-        y,
-        final_predictions
-    )
+    y_test = test_merged["target_24h_label"].astype(int)
+    xgb_test = test_merged["xgb_probability"].values
+    cnn_test = test_merged["cnn_probability"].values
 
     print("\n" + "=" * 60)
-    print(" FUSION RESULTS")
+    print(" TEST-PERIOD INDIVIDUAL MODEL PERFORMANCE")
     print("=" * 60)
+    print(f"XGBoost ROC-AUC: {roc_auc_score(y_test, xgb_test):.4f}")
+    print(f"XGBoost PR-AUC : {average_precision_score(y_test, xgb_test):.4f}")
+    print(f"CNN ROC-AUC    : {roc_auc_score(y_test, cnn_test):.4f}")
+    print(f"CNN PR-AUC     : {average_precision_score(y_test, cnn_test):.4f}")
 
-    print(
-        f"ROC-AUC : {fusion_roc:.4f}"
-    )
+    fusion_X_test = np.column_stack([xgb_test, cnn_test])
+    fusion_test_prob = fusion_model.predict_proba(fusion_X_test)[:, 1]
 
-    print(
-        f"PR-AUC  : {fusion_pr:.4f}"
-    )
+    fusion_roc = roc_auc_score(y_test, fusion_test_prob)
+    fusion_pr = average_precision_score(y_test, fusion_test_prob)
 
-    print(
-        f"Threshold: {best_threshold:.2f}"
-    )
+    final_predictions = (fusion_test_prob >= best_threshold).astype(int)
 
-    print(
-        f"Precision: {precision:.4f}"
-    )
+    precision = precision_score(y_test, final_predictions, zero_division=0)
+    recall = recall_score(y_test, final_predictions, zero_division=0)
+    final_f1 = f1_score(y_test, final_predictions, zero_division=0)
+    cm = confusion_matrix(y_test, final_predictions)
 
-    print(
-        f"Recall   : {recall:.4f}"
-    )
-
-    print(
-        f"F1       : {best_f1:.4f}"
-    )
-
-    print(
-        "\nConfusion Matrix:"
-    )
-
+    print("\n" + "=" * 60)
+    print(" FUSION RESULTS (evaluated on unseen TEST period only)")
+    print("=" * 60)
+    print(f"ROC-AUC  : {fusion_roc:.4f}")
+    print(f"PR-AUC   : {fusion_pr:.4f}")
+    print(f"Threshold: {best_threshold:.2f}")
+    print(f"Precision: {precision:.4f}")
+    print(f"Recall   : {recall:.4f}")
+    print(f"F1       : {final_f1:.4f}")
+    print("\nConfusion Matrix:")
     print(cm)
 
     # --------------------------------------------------------
-    # Save predictions
+    # Save outputs
     # --------------------------------------------------------
 
-    merged[
-        "fusion_probability"
-    ] = fusion_prob
-
-    merged[
-        "fusion_prediction"
-    ] = final_predictions
-
-    merged.to_csv(
-        OUTPUT_DIR
-        / "fusion_predictions.csv",
-        index=False
-    )
-
-    # --------------------------------------------------------
-    # Save model
-    # --------------------------------------------------------
+    test_merged["fusion_probability"] = fusion_test_prob
+    test_merged["fusion_prediction"] = final_predictions
+    test_merged.to_csv(OUTPUT_DIR / "fusion_predictions.csv", index=False)
 
     joblib.dump(
         {
             "model": fusion_model,
-            "features": [
-                "xgb_probability",
-                "cnn_probability",
-            ],
-            "threshold":
-                best_threshold,
+            "features": ["xgb_probability", "cnn_probability"],
+            "threshold": best_threshold,
         },
-        OUTPUT_DIR
-        / "fusion_model.joblib"
+        OUTPUT_DIR / "fusion_model.joblib"
     )
 
     results = pd.DataFrame([
-
         {
             "model": "XGBoost",
-            "roc_auc":
-                roc_auc_score(
-                    y,
-                    xgb_prob
-                ),
-            "pr_auc":
-                average_precision_score(
-                    y,
-                    xgb_prob
-                ),
+            "roc_auc": roc_auc_score(y_test, xgb_test),
+            "pr_auc": average_precision_score(y_test, xgb_test),
         },
-
         {
             "model": "CNN",
-            "roc_auc":
-                roc_auc_score(
-                    y,
-                    cnn_prob
-                ),
-            "pr_auc":
-                average_precision_score(
-                    y,
-                    cnn_prob
-                ),
+            "roc_auc": roc_auc_score(y_test, cnn_test),
+            "pr_auc": average_precision_score(y_test, cnn_test),
         },
-
         {
             "model": "Fusion",
-            "roc_auc":
-                fusion_roc,
-            "pr_auc":
-                fusion_pr,
-            "precision":
-                precision,
-            "recall":
-                recall,
-            "f1":
-                best_f1,
-            "threshold":
-                best_threshold,
+            "roc_auc": fusion_roc,
+            "pr_auc": fusion_pr,
+            "precision": precision,
+            "recall": recall,
+            "f1": final_f1,
+            "threshold": best_threshold,
         },
-
     ])
 
-    results.to_csv(
-        OUTPUT_DIR
-        / "fusion_results.csv",
-        index=False
-    )
+    results.to_csv(OUTPUT_DIR / "fusion_results.csv", index=False)
 
-    print()
-    print(
-        "Results saved to:"
-    )
-
-    print(
-        OUTPUT_DIR
-    )
+    print("\nResults saved to:")
+    print(OUTPUT_DIR)
 
 
 if __name__ == "__main__":

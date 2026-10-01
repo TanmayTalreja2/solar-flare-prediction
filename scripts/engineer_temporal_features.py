@@ -16,10 +16,30 @@ YEARS = list(range(2010, 2018))
 
 BASE_FEATURES = [
     "USFLUX",
+    "MEANGAM",
+    "MEANGBT",
+    "MEANGBZ",
+    "MEANGBH",
+    "MEANJZD",
+    "TOTUSJZ",
+    "MEANALP",
+    "MEANJZH",
     "TOTUSJH",
-    "TOTPOT",
+    "ABSNJZH",
+    "SAVNCPP",
     "MEANPOT",
+    "TOTPOT",
     "MEANSHR",
+    "SHRGT45",
+    "R_VALUE",
+    "TOTFX",
+    "TOTFY",
+    "TOTFZ",
+    "EPSX",
+    "EPSY",
+    "EPSZ",
+    "TOTBSQ",
+    "TOTABSTWIST",
 ]
 
 TIME_WINDOWS = {
@@ -36,7 +56,7 @@ def load_data(year):
 
     input_path = (
         FEATURE_DIR /
-        f"sharp_goes_features_{year}_full.parquet"
+        f"sharp_goes_features_{year}_full_25params.parquet"
     )
 
     if not input_path.exists():
@@ -425,7 +445,7 @@ def save_data(data, year):
 
     output_path = (
         FEATURE_DIR /
-        f"sharp_goes_temporal_features_{year}_full.parquet"
+        f"sharp_goes_temporal_features_{year}_full_25params.parquet"
     )
 
     output_path.parent.mkdir(
@@ -479,7 +499,7 @@ def main():
         successful.append(year)
 
         print()
-        print(f"✓ Finished {year}")
+        print(f"Finished {year}")
         print()
 
     print("=" * 70)
@@ -492,5 +512,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
