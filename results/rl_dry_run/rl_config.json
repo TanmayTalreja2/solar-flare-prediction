@@ -1,0 +1,95 @@
+{
+  "generated": "2026-10-13 09:13",
+  "state_features": [
+    "ABSNJZH_ROLLSTD_12h",
+    "SAVNCPP_ROLLSTD_6h",
+    "TOTUSJZ_ROLLSTD_12h",
+    "TOTUSJH"
+  ],
+  "bins_per_feature": [
+    5,
+    5,
+    5,
+    5
+  ],
+  "bin_edges": [
+    [
+      2.9710387910551446,
+      6.595124344596518,
+      11.7106332175361,
+      21.291699866133037
+    ],
+    [
+      185520701065.69308,
+      355873624992.54517,
+      578029219726.2748,
+      957935688156.861
+    ],
+    [
+      228095350532.43506,
+      520408397163.8254,
+      918132275849.1891,
+      1680329361200.4004
+    ],
+    [
+      67.78,
+      214.442,
+      436.6890000000001,
+      907.526
+    ]
+  ],
+  "n_states": 625,
+  "actions": [
+    "no alert",
+    "alert"
+  ],
+  "reward_variants": [
+    {
+      "name": "RL, FN penalty -8 (paper default)",
+      "tp_tn_fp_fn": [
+        5.0,
+        1.0,
+        -1.0,
+        -8.0
+      ]
+    },
+    {
+      "name": "RL, FN penalty -16",
+      "tp_tn_fp_fn": [
+        5.0,
+        1.0,
+        -1.0,
+        -16.0
+      ]
+    },
+    {
+      "name": "RL, FN penalty -32",
+      "tp_tn_fp_fn": [
+        5.0,
+        1.0,
+        -1.0,
+        -32.0
+      ]
+    },
+    {
+      "name": "RL, FN penalty -64",
+      "tp_tn_fp_fn": [
+        5.0,
+        1.0,
+        -1.0,
+        -64.0
+      ]
+    }
+  ],
+  "selected_variant": "RL, FN penalty -16",
+  "epochs": 8,
+  "alpha": 0.05,
+  "gamma": 0.9,
+  "epsilon_start": 1.0,
+  "epsilon_end": 0.05,
+  "seed": 42,
+  "train_rows": 81136,
+  "validation_rows": 42045,
+  "test_rows": 118322,
+  "note": "The reward does not depend on how an action changes later states, so the learned policy is equivalent to a cost-sensitive threshold on binned flare rates. This is a research checkpoint, not a production agent."
+}

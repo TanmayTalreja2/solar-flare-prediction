@@ -179,3 +179,48 @@ st.warning(
     "suggests the fusion mechanism itself, not feature availability, is "
     "now the limiting factor. Documented here rather than hidden."
 )
+
+
+st.markdown("---")
+st.header("Live Mode and Live-Data Limitations")
+
+st.markdown(
+    """
+**Live Mode** queries JSOC's near-real-time SHARP series for the last 36 hours, builds the same
+features the production model was trained on, and scores every NOAA-numbered active region. The risk
+band comes from the XGBoost model; the CNN (when a live magnetogram is available) and the fusion
+model are shown as supporting signals.
+
+**Limitations of live scores**
+- They cannot be checked until the following 24 hours have passed, and no live validation has been done.
+- The models were trained on JSOC's definitive series; the near-real-time series is calibrated less
+  rigorously, so small differences are possible.
+- The CNN and fusion models were trained on a class-balanced image sample (half flare, half no-flare),
+  so their probabilities are on a different scale from XGBoost's and are not used for the risk band.
+- Training and testing used 2012, near the maximum of solar cycle 24; current conditions may differ.
+"""
+)
+
+st.page_link("pages/rl_experiment.py", label="See the exploratory RL experiment")
+
+st.markdown("---")
+st.header("Live Mode and Live-Data Limitations")
+
+st.markdown(
+    """
+**Live Mode** queries JSOC's near-real-time SHARP series for the last 36 hours, builds the same
+features the production model was trained on, and scores every NOAA-numbered active region. The risk
+band comes from the XGBoost model; the CNN (when a live magnetogram is available) and the fusion
+model are shown as supporting signals.
+
+**Limitations of live scores**
+- They cannot be checked until the following 24 hours have passed, and no live validation has been done.
+- The models were trained on JSOC's definitive series; the near-real-time series is calibrated less
+  rigorously, so small differences are possible.
+- The CNN and fusion models were trained on a class-balanced image sample (half flare, half no-flare),
+  so their probabilities are on a different scale from XGBoost's and are not used for the risk band.
+- Training and testing used 2012, near the maximum of solar cycle 24; current conditions may differ.
+"""
+)
+
+st.page_link("pages/rl_experiment.py", label="See the exploratory RL experiment")

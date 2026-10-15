@@ -760,9 +760,9 @@ def build_plain_language_report(observation, history, selected_ar, selected_time
     story.append(Paragraph(
         escape(
             f"This tool is a research prototype, tested on one year of historical data (2012). "
-            f"When it raised an alert like this one, about {_ratio_text(precision)} of those alerts "
+            f"When it raised an alert like this one, {_ratio_text(precision)} of those alerts "
             f"were actually followed by a real flare. And out of all the real flares that happened "
-            f"in the test year, the model only caught about {_ratio_text(recall)} of them -- it "
+            f"in the test year, the model only caught {_ratio_text(recall)} of them -- it "
             f"missed most of them."
         ),
         S["body"],
@@ -1088,7 +1088,57 @@ def build_technical_report(observation, history, selected_ar, selected_time):
         story.append(Paragraph(escape(text), S["bullet"], bulletText="\u2022"))
 
     # ---------------- 8. Reproducibility ----------------
-    story.append(Paragraph("8. Reproducibility", S["h1"]))
+    story.append(Paragraph("8. Exploratory experiment: tabular Double Q-learning", S["h1"]))
+
+    rl_path = PROJECT_ROOT / "results" / "rl_dry_run" / "rl_results.csv"
+    rl_cfg_path = PROJECT_ROOT / "results" / "rl_dry_run" / "rl_config.json"
+
+    if rl_path.exists():
+
+        rl = pd.read_csv(rl_path)
+
+        feature_text = ""
+        if rl_cfg_path.exists():
+            cfg = json.loads(rl_cfg_path.read_text(encoding="utf-8"))
+            feature_text = " State features: " + ", ".join(cfg.get("state_features", [])) + "."
+
+        story.append(Paragraph(
+            escape(
+                "A tabular Double Q-learning agent was trained on the real 2012 training months with the "
+                "paper's asymmetric reward (true positive +5, true negative +1, false positive -1, missed "
+                "flare -8 by default, with a sweep over harsher missed-flare penalties chosen on the "
+                "validation period). Actions are alert / no alert; the state is a quantile-binned summary "
+                "of the most important XGBoost features." + feature_text
+            ),
+            S["body"],
+        ))
+
+        rows = [["Policy", "Test TSS", "Test recall", "Test false-alarm rate", "Test precision", "Alerts"]]
+
+        for _, r in rl.iterrows():
+            rows.append([
+                r["policy"], _fmt(r["test_tss"]), _fmt(r["test_recall"]),
+                _fmt(r["test_far"]), _fmt(r["test_precision"]), f"{int(r['test_alerts']):,}",
+            ])
+
+        story.append(_table(rows, [5.6 * cm, 2.0 * cm, 2.2 * cm, 3.0 * cm, 2.4 * cm, 1.8 * cm], S))
+        story.append(Paragraph(
+            escape(
+                "The reward depends only on the action and the true outcome, not on how the action changes "
+                "later states, so the learned policy is equivalent to a cost-sensitive threshold on binned "
+                "flare rates. This experiment shows the reward weighting working on real data; it does not "
+                "show that reinforcement learning forecasts flares better than XGBoost."
+            ),
+            S["small"],
+        ))
+
+    else:
+        story.append(Paragraph(
+            escape("The reinforcement-learning experiment has not been run (scripts/rl_dry_run.py)."),
+            S["body"],
+        ))
+
+    story.append(Paragraph("9. Reproducibility", S["h1"]))
 
     rows = [
         ["Item", "Value"],
