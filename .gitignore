@@ -71,3 +71,6 @@ dist/
 *.egg-info/
 # Live prediction log
 data/live_log/
+
+#Assignment mapping
+assignments/*
