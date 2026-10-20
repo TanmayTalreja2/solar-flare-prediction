@@ -40,7 +40,7 @@ drms
 
 # Development / Testing
 pytest
-ruffreportlab
+ruff
 astropy
 reportlab
 tqdm

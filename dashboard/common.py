@@ -15,10 +15,29 @@ from scripts.predict import SolarFlarePredictor
 TEST_START = pd.Timestamp("2012-07-01 00:00:00")
 
 MODEL_PATH = PROJECT_ROOT / "models" / "xgboost_2012_temporal_features_25params.joblib"
+if not MODEL_PATH.exists():
+    fallback_model = PROJECT_ROOT / "models" / "xgboost_2012_temporal_features.joblib"
+    if fallback_model.exists():
+        MODEL_PATH = fallback_model
+
 FEATURES_PATH = (
     PROJECT_ROOT / "data" / "processed" / "features" /
     "sharp_goes_temporal_features_2012_full_25params.parquet"
 )
+if not FEATURES_PATH.exists():
+    fallback_features = (
+        PROJECT_ROOT / "data" / "processed" / "features" /
+        "sharp_goes_temporal_features_2012_full.parquet"
+    )
+    sample_features = (
+        PROJECT_ROOT / "data" / "processed" / "features" /
+        "sample_test_features.parquet"
+    )
+    if fallback_features.exists():
+        FEATURES_PATH = fallback_features
+    elif sample_features.exists():
+        FEATURES_PATH = sample_features
+
 CNN_METRICS_PATH = PROJECT_ROOT / "results" / "cnn" / "final_metrics.csv"
 CNN_CONFUSION_IMAGE = PROJECT_ROOT / "results" / "cnn" / "plots" / "confusion_matrix.png"
 FUSION_METRICS_PATH = PROJECT_ROOT / "results" / "ensemble_25params" / "fusion_results.csv"

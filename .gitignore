@@ -43,6 +43,9 @@ logs/
 data/raw/*
 data/interim/*
 data/processed/*
+!data/processed/features/
+data/processed/features/*
+!data/processed/features/sample_test_features.parquet
 data/external/*
 
 !data/raw/.gitkeep
@@ -53,12 +56,14 @@ data/external/*
 # Model artifacts
 models/*
 !models/.gitkeep
+!models/xgboost_2012_temporal_features.joblib
 
 *.pt
 *.pth
 *.ckpt
 *.onnx
 *.joblib
+!models/xgboost_2012_temporal_features.joblib
 *.pkl
 
 # Generated reports
